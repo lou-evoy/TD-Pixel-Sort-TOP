@@ -1,39 +1,10 @@
-/* Pixel Sort — CUDA implementation.
- *
- * Targets CUDA Toolkit 13.x (validated on 13.3.33) and CUB 3.3 (bundled in CCCL).
- * Builds a fat binary across Turing..Blackwell; see CMakeLists.txt for the gencode list.
- *
- * ============================ ALGORITHM =====================================
- * A single device-wide key/value radix sort of the WHOLE frame with a composite
- * key reproduces "sort pixels within each scanline, optionally only inside masked
- * runs". This is provably correct for arbitrary run lengths and treats the whole
- * -line case identically, and leans on CUB's per-architecture tuning.
- *
- * We work in "line-order" index space k = 0..N-1, where
- *     line     = k / L      (which row    for Horizontal, which column for Vertical)
- *     posInLine= k % L      (x within row for Horizontal, y within col  for Vertical)
- *     L        = width  (Horizontal)  or  height (Vertical)         [line length]
- *     M        = height (Horizontal)  or  width  (Vertical)         [number of lines]
- *     N        = L * M = width * height
- * The pixel coordinate for a given k is:
- *     Horizontal: (x,y) = (posInLine, line)
- *     Vertical  : (x,y) = (line,      posInLine)
- * The SAME mapping converts a sorted rank r back to an output coordinate (proof
- * in gatherKernel), so input ingest and output scatter are perfectly symmetric.
- *
- * Per frame:
- *   1. ingestKernel    : surf-read each pixel into linear myPixels[k] (line-order),
- *                        compute the mask criterion -> mySortable[k].
- *   2. buildScanKernel : from mySortable, emit a ScanElem{value=posInLine, flag=reset}
- *                        per k. reset marks the first pixel of a contiguous sortable
- *                        run (or any non-sortable pixel, or a line start).
- *   3. InclusiveScan   : custom associative op propagates each run's start position.
- *                        Result value == runStart[k].
- *   4. buildKeysKernel : pack composite uint64 key + uint32 payload (=k).
- *   5. SortPairs       : CUB DeviceRadixSort, whole frame, ascending.
- *   6. gatherKernel    : scatter sorted pixels to the output surface and blend (Mix).
- * ===========================================================================
- */
+// Pixel Sort — CUDA implementation
+// validated: CUDA 13.3.33, CUB 3.3 (CCCL)
+//
+// whole-frame composite-key radix sort == per-scanline sort within masked runs
+// line-order index k: line = k/L, pos = k%L, L = line length, N = W*H
+// same k<->(x,y) map for ingest and scatter, so they are symmetric
+// per frame: ingest -> buildScan -> InclusiveScan -> buildKeys -> SortPairs -> gather
 
 #include "PixelSortCUDA.h"
 #include "CudaCheck.h"

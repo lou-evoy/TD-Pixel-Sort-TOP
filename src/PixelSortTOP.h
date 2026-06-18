@@ -1,8 +1,5 @@
-/* Pixel Sort TOP — TouchDesigner Custom Operator (C++ TOP, CUDA execute mode).
- *
- * Thin SDK-facing glue. All image processing lives in PixelSortCUDA.{h,cu}.
- * Validated against TouchDesigner 2025.32050, TOP C++ API version 12.
- */
+// Pixel Sort TOP — TD glue
+// validated: TouchDesigner 2025.32050, TOP C++ API v12
 #ifndef PIXELSORT_TOP_H
 #define PIXELSORT_TOP_H
 

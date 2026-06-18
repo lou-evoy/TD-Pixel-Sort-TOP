@@ -1,11 +1,5 @@
-/* Pixel Sort TOP — TouchDesigner SDK glue.
- *
- * Mirrors the structure of the shipped CudaTOP sample (Samples/CPlusPlus/CudaTOP):
- *   - executeMode = TOP_ExecuteMode::CUDA
- *   - acquire input texture as a cudaArray via OP_TOPInput::getCUDAArray()
- *   - create the output cudaArray via TOP_Output::createCUDAArray()
- *   - wrap both as cudaSurfaceObjects, do work between begin/endCUDAOperations()
- *   - use one instance-owned cudaStream_t for the whole node's lifetime
+/* Pixel Sort TOP — TD SDK glue.
+ * mirrors the CudaTOP sample (Samples/CPlusPlus/CudaTOP).
  */
 #include "PixelSortTOP.h"
 
@@ -13,11 +7,9 @@
 #include <cstdio>
 #include <algorithm>
 
-// Single source of truth for the plugin version. Bump on each release; keep the numeric
-// parts in sync with customOPInfo.major/minorVersion below.
+// keep in sync with customOPInfo.major/minorVersion below
 static const char* kVersion = "1.0.0";
 
-// ----------------------------- DLL entry points -----------------------------
 extern "C"
 {
 
@@ -29,14 +21,14 @@ FillTOPPluginInfo(TOP_PluginInfo* info)
 
     info->executeMode = TOP_ExecuteMode::CUDA;
 
-    // opType: must start with A-Z then lowercase/digits, unique across installed TOPs.
+    // opType: A-Z then lowercase/digits, unique across installed TOPs
     info->customOPInfo.opType->setString("Pixelsort");
     info->customOPInfo.opLabel->setString("Pixel Sort");
     info->customOPInfo.opIcon->setString("PXS");
     info->customOPInfo.authorName->setString("SAT");
     info->customOPInfo.authorEmail->setString("levoy@sat.qc.ca");
 
-    // Pixel sorting is a 1-in / 1-out filter.
+    // 1-in / 1-out filter
     info->customOPInfo.minInputs = 1;
     info->customOPInfo.maxInputs = 1;
 
@@ -58,14 +50,8 @@ DestroyTOPInstance(TOP_CPlusPlusBase* instance, TOP_Context* context)
 
 } // extern "C"
 
-// --------------------------------- helpers ----------------------------------
-// Bind a fresh surface object to 'array'. We destroy any previous object and create
-// a new one every cook rather than caching it. Caching (as the CudaTOP sample does,
-// keyed on cudaGetSurfaceObjectResourceDesc) is fragile: when the node is bypassed and
-// reactivated, TD frees the old cudaArray and re-registers its interop, leaving the
-// cached surface handle stale. Querying a stale handle returns cudaErrorInvalidResource
-// Handle (400) as a *sticky* error that then surfaces at the next kernel-launch check.
-// Surface creation is only a few microseconds, so recreating each cook is the robust choice.
+// recreate every cook, never cache: bypass/reactivate frees the cudaArray, leaving a
+// cached handle stale (sticky cudaErrorInvalidResourceHandle)
 static void
 setupCudaSurface(cudaSurfaceObject_t* surface, cudaArray_t array)
 {
@@ -87,7 +73,6 @@ isSupported8BitRGBA(OP_PixelFormat f)
     return f == OP_PixelFormat::BGRA8Fixed || f == OP_PixelFormat::RGBA8Fixed;
 }
 
-// ------------------------------- PixelSortTOP --------------------------------
 PixelSortTOP::PixelSortTOP(const OP_NodeInfo* info, TOP_Context* context) :
     myNodeInfo(info), myContext(context), myStream(0),
     myInputSurface(0), myOutputSurface(0), myError(nullptr)
@@ -100,17 +85,16 @@ PixelSortTOP::~PixelSortTOP()
     if (myInputSurface)  cudaDestroySurfaceObject(myInputSurface);
     if (myOutputSurface) cudaDestroySurfaceObject(myOutputSurface);
     if (myStream)        cudaStreamDestroy(myStream);
-    // mySorter frees its device buffers in its own destructor.
+    // mySorter frees its buffers
 }
 
 void
 PixelSortTOP::getGeneralInfo(TOP_GeneralInfo* ginfo, const OP_Inputs* inputs, void*)
 {
-    // Cook when the input or a parameter changes (default filter behavior).
+    // cook on input/param change
     ginfo->cookEveryFrame = false;
     ginfo->cookEveryFrameIfAsked = false;
-    // Keep the Version field read-only here too (runs even when no input is connected
-    // and execute would early-return).
+    // Version read-only (runs even with no input, when execute early-returns)
     if (inputs) inputs->enablePar("Version", false);
 }
 
@@ -161,12 +145,12 @@ PixelSortTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void*)
         return;
     }
 
-    // Output matches the input texture (size / format / dim).
+    // output matches input
     TOP_CUDAOutputInfo info;
     info.textureDesc = inDesc;
     info.stream      = myStream;
 
-    // --- All input/parameter queries must happen BEFORE beginCUDAOperations() ---
+    // all input/param queries BEFORE beginCUDAOperations()
     OP_CUDAAcquireInfo acquireInfo;
     acquireInfo.stream = myStream;
     const OP_CUDAArrayInfo* inputArrayInfo = topInput->getCUDAArray(acquireInfo, nullptr);
@@ -178,7 +162,7 @@ PixelSortTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void*)
         return;
     }
 
-    // Gather parameters and clamp to valid ranges.
+    // gather + clamp params
     pixelsort::Params p;
     p.width  = (int)inDesc.width;
     p.height = (int)inDesc.height;
@@ -192,7 +176,7 @@ PixelSortTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void*)
     p.seed    = (float)inputs->getParDouble("Seed");
     p.bypass  = inputs->getParInt("Bypass") != 0;
 
-    // --- Begin CUDA: cudaArray pointers become valid now ---
+    // begin CUDA: cudaArray pointers valid now
     if (!myContext->beginCUDAOperations(nullptr))
     {
         myError = "beginCUDAOperations() failed.";
@@ -210,9 +194,7 @@ PixelSortTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void*)
         myInputSurface = 0;
     }
 
-    // Swallow any benign sticky error from (re)creating surface objects above (e.g.
-    // after a bypass toggle), so the launch checks inside process() only report errors
-    // from this cook's own kernels.
+    // swallow benign sticky error from surface (re)creation so process() reports only this cook
     cudaGetLastError();
 
     const char* algoError = nullptr;
@@ -229,21 +211,18 @@ PixelSortTOP::getErrorString(OP_String* error, void*)
     error->setString(myError);
 }
 
-// ------------------------------- parameters ----------------------------------
 void
 PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
 {
     const char* sortPage = "Sort";
 
-    // The 8-channel set for Sort Key. 'names' are the stored values; their order
-    // matches pixelsort::Channel.
+    // Sort Key channels; order matches pixelsort::Channel
     const char* chanNames[]  = { "Luminance", "Hue", "Saturation", "Value",
                                  "Red", "Green", "Blue", "Alpha" };
     const char* chanLabels[] = { "Luminance", "Hue", "Saturation", "Value",
                                  "Red", "Green", "Blue", "Alpha" };
 
-    // Bypass — pass the input through untouched (the C++ TOP API does not report the
-    // node's native Bypass flag to the plugin, so we expose our own that actually works).
+    // Bypass — API doesn't report native Bypass to plugin, so expose our own
     {
         OP_NumericParameter np("Bypass");
         np.label = "Bypass";
@@ -252,7 +231,6 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendToggle(np);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Sort Axis
     {
         OP_StringParameter sp("Axis");
         sp.label = "Sort Axis";
@@ -263,7 +241,6 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendMenu(sp, 2, names, labels);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Sort Order
     {
         OP_StringParameter sp("Order");
         sp.label = "Sort Order";
@@ -274,7 +251,6 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendMenu(sp, 2, names, labels);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Sort Key
     {
         OP_StringParameter sp("Sortkey");
         sp.label = "Sort Key";
@@ -283,13 +259,12 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendMenu(sp, 8, chanNames, chanLabels);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Sort Mode — the interval/reveal style driven by Sort Amount.
+    // Sort Mode — interval/reveal style driven by Sort Amount
     {
         OP_StringParameter sp("Sortmode");
         sp.label = "Sort Mode";
         sp.page  = sortPage;
-        // Default to a mode where the Amount slider is immediately live (at 1.0 it
-        // equals Full; lowering it reveals progressively).
+        // default to a mode where Amount is immediately live
         sp.defaultValue = "Revealdark";
         const char* names[]  = { "Full", "Revealdark", "Revealbright",
                                  "Random", "Edges", "Melt" };
@@ -298,7 +273,7 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendMenu(sp, 6, names, labels);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Sort Amount — single slider that drives the selected Sort Mode (0..1).
+    // Sort Amount — drives the selected Sort Mode (0..1)
     {
         OP_NumericParameter np("Amount");
         np.label = "Sort Amount";
@@ -310,7 +285,7 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         OP_ParAppendResult res = manager->appendFloat(np);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Seed — random pattern for Random Intervals mode (animate for evolving randomness).
+    // Seed — Random Intervals pattern (animate for evolving randomness)
     {
         OP_NumericParameter np("Seed");
         np.label = "Seed";
@@ -318,11 +293,11 @@ PixelSortTOP::setupParameters(OP_ParameterManager* manager, void*)
         np.defaultValues[0] = 0.0;
         np.minValues[0] = 0.0;  np.maxValues[0] = 100.0;
         np.minSliders[0] = 0.0; np.maxSliders[0] = 100.0;
-        np.clampMins[0] = true; // allow large values; only clamp the low end
+        np.clampMins[0] = true; // clamp low end only
         OP_ParAppendResult res = manager->appendFloat(np);
         assert(res == OP_ParAppendResult::Success);
     }
-    // Version — read-only string on its own tab (shows the version the node was made with).
+    // Version — read-only, shows the build version
     {
         OP_StringParameter sp("Version");
         sp.label = "Version";

@@ -1,16 +1,5 @@
-/* Pixel Sort — CUDA algorithm interface.
- *
- * This header is the only contract between the TouchDesigner glue (PixelSortTOP.cpp)
- * and the CUDA implementation (PixelSortCUDA.cu). It is plain C++17 with no CUDA
- * kernel syntax so it compiles under MSVC as well as nvcc.
- *
- * Pipeline (see PixelSortCUDA.cu for the proofs of correctness):
- *   ingest -> run-start segmented scan -> composite-key build -> CUB radix sort -> gather+mix
- *
- * Images are handled as CUDA surface objects (cudaArray), matching the real TD
- * CUDA-TOP API. We linearize the input into device memory in the ingest kernel,
- * sort in linear "line-order" space, then scatter back via a surface write.
- */
+// Pixel Sort — CUDA algorithm interface (plain C++17, no kernel syntax)
+// pipeline: ingest -> run-start scan -> key build -> CUB radix sort -> gather+mix
 #ifndef PIXELSORT_CUDA_H
 #define PIXELSORT_CUDA_H
 
@@ -19,14 +8,10 @@
 
 namespace pixelsort {
 
-// Maximum supported size along either image dimension. Set by the composite-key
-// field widths (13 bits => 8192). Covers 8K (7680x4320) with margin. See the
-// key-layout block in PixelSortCUDA.cu before changing this.
+// max image dim; bounded by composite-key field width (13 bits => 8192)
 static constexpr int kMaxDim = 8192;
 
-// Selectable scalar derived from a pixel. Used both for the sort key and the
-// threshold mask criterion. The integer values MUST match the menu item order
-// declared in PixelSortTOP::setupParameters().
+// per-pixel scalar for sort key / mask; values MUST match setupParameters() menu order
 enum class Channel : int32_t
 {
     Luminance = 0,
@@ -41,8 +26,8 @@ enum class Channel : int32_t
 
 enum class Axis : int32_t
 {
-    Horizontal = 0,   // sort within each row;    line length = width
-    Vertical   = 1,   // sort within each column; line length = height
+    Horizontal = 0,   // line = row, length = width
+    Vertical   = 1,   // line = column, length = height
 };
 
 enum class Order : int32_t
@@ -51,15 +36,14 @@ enum class Order : int32_t
     Descending = 1,
 };
 
-// Sort "style" — how the single Sort Amount slider [0,1] shapes the result.
-// All map 0 => identity (no sorting) and 1 => full sort. Integer values MUST match
-// the Sort Mode menu order in PixelSortTOP::setupParameters().
-//   Full        : whole line is one interval (Amount ignored). satyarth "none".
-//   RevealDark  : reveal by sort key, darkest/lowest first (Amount = coverage).
-//   RevealBright: reveal by sort key, brightest/highest first.
-//   Random      : random-length intervals that grow to the whole line at Amount=1. satyarth "random".
-//   Edges       : intervals bounded by key gradients; Amount = edge sensitivity. satyarth "edges".
-//   Melt        : interpolate within-run order between original position and key (Amount = blend).
+// how Amount slider [0,1] shapes result; 0 => identity, 1 => full sort
+// values MUST match setupParameters() Sort Mode menu order
+//   Full        : whole line is one interval (Amount ignored)
+//   RevealDark  : reveal by key, darkest first (Amount = coverage)
+//   RevealBright: reveal by key, brightest first
+//   Random      : random-length intervals, whole line at Amount=1
+//   Edges       : intervals bounded by key gradients; Amount = sensitivity
+//   Melt        : blend within-run order between position and key
 enum class Mode : int32_t
 {
     Full         = 0,
@@ -70,7 +54,7 @@ enum class Mode : int32_t
     Melt         = 5,
 };
 
-// All per-frame parameters, gathered on the host before any CUDA work begins.
+// per-frame params, gathered host-side before CUDA work
 struct Params
 {
     int32_t  width  = 0;
@@ -81,26 +65,20 @@ struct Params
     Channel  sortKey         = Channel::Luminance;
     Mode     mode            = Mode::Full;
 
-    // Single slider that drives the selected Mode. 0 => identity, 1 => full sort.
+    // drives selected Mode; 0 => identity, 1 => full sort
     float    amount          = 1.0f;
 
-    // Random-pattern seed (Random mode only). Change it for a different random
-    // interval layout; animate it for evolving randomness.
+    // Random mode seed; animate for evolving randomness
     float    seed            = 0.0f;
 
-    // True when the input/output cudaArray is BGRA8 (TD's preferred 8-bit format),
-    // false for RGBA8. Only affects which surface channel maps to R/G/B when
-    // deriving the key; the pixel bytes themselves are moved verbatim.
+    // BGRA8 vs RGBA8; only affects R/G/B channel mapping for the key, bytes moved verbatim
     bool     bgra            = true;
 
-    // When true, copy the input straight to the output (no sort) — mirrors a native
-    // TOP's Bypass flag, which the C++ TOP API does not expose to the plugin.
+    // copy input to output; our own bypass since the API hides the native flag
     bool     bypass          = false;
 };
 
-// Owns all device buffers and CUB temp storage. One instance per TOP node.
-// Allocation happens lazily in process() and is only redone when the pixel count
-// grows (resolution change) — never per frame, satisfying the real-time constraint.
+// owns device buffers + CUB temp; one per node, realloc only when pixel count grows
 class PixelSorter
 {
 public:
@@ -110,13 +88,9 @@ public:
     PixelSorter(const PixelSorter&) = delete;
     PixelSorter& operator=(const PixelSorter&) = delete;
 
-    // Runs the full pipeline on 'stream'. 'inSurf' may be 0 (no input) in which
-    // case the output is cleared to transparent black. Returns cudaSuccess on
-    // success; on failure returns the error code and sets *outError to a static
-    // message string valid until the next process() call.
-    //
-    // Must be called between TOP_Context::beginCUDAOperations()/endCUDAOperations().
-    // Does NOT synchronize the stream (TD manages CUDA<->Vulkan ordering).
+    // runs pipeline on 'stream'; inSurf==0 clears to transparent black
+    // *outError set on failure, valid until next process()
+    // call between begin/endCUDAOperations(); does NOT sync the stream
     cudaError_t process(cudaSurfaceObject_t inSurf,
                         cudaSurfaceObject_t outSurf,
                         const Params& p,
@@ -127,22 +101,20 @@ private:
     cudaError_t ensureCapacity(int width, int height, const char** outError);
     void        freeAll();
 
-    // Capacity currently allocated for (in pixels). 0 => nothing allocated yet.
+    // allocated capacity in pixels; 0 => nothing allocated
     int64_t                 myCapacity = 0;
 
-    // Per-pixel scratch in line-order (see .cu). The sort payload is the packed
-    // pixel color itself, so the gather is a coalesced copy and no separate pixel
-    // buffer is needed.
-    uint16_t*               mySortKey    = nullptr;   // [N] quantized sort-key value (reveal/edges/sort)
-    uint8_t*                mySortable   = nullptr;   // [N] 1 if pixel participates in sort
-    uint32_t*               myScan       = nullptr;   // [N] packed (pos|reset) in-place scan buffer
+    // per-pixel line-order scratch; payload is the packed color itself
+    uint16_t*               mySortKey    = nullptr;   // [N] quantized sort key
+    uint8_t*                mySortable   = nullptr;   // [N] 1 if in sort
+    uint32_t*               myScan       = nullptr;   // [N] packed (pos|reset)
 
     unsigned long long*     myKeys       = nullptr;   // [N] composite keys (in)
     unsigned long long*     myKeysAlt    = nullptr;   // [N] (out)
-    uint32_t*               myVals       = nullptr;   // [N] payload = packed RGBA color (in)
+    uint32_t*               myVals       = nullptr;   // [N] packed RGBA payload (in)
     uint32_t*               myValsAlt    = nullptr;   // [N] (out)
 
-    void*                   myCubTemp    = nullptr;   // shared scan/sort temp storage
+    void*                   myCubTemp    = nullptr;   // shared scan/sort temp
     size_t                  myCubTempBytes = 0;
 };
 
