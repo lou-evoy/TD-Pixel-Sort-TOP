@@ -94,7 +94,6 @@ target_compile_definitions(PixelSortTOP PRIVATE
     WIN32_LEAN_AND_MEAN     # NOMINMAX is already defined by CPlusPlus_Common.h
 )
 
-# Per-language compile options.
 target_compile_options(PixelSortTOP PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
     $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>

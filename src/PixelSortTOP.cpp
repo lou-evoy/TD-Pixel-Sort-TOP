@@ -126,7 +126,7 @@ void
 PixelSortTOP::execute(TOP_Output* output, const OP_Inputs* inputs, void*)
 {
     myError = nullptr;
-    inputs->enablePar("Version", false);   // make the Version field read-only
+    inputs->enablePar("Version", false);
 
     if (inputs->getNumInputs() < 1)
     {
