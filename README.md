@@ -19,7 +19,7 @@ key, entirely on the GPU. The sort style is chosen from a drop-down menu and sha
 
 ## Getting the node
 
-The compiled plugin isn't distributed here — precompiled builds will be available to supporters on **Patreon** *(link coming soon)*. To build it yourself, read on.
+The compiled plugin isn't distributed here — precompiled builds will be available on **Gumroad** *(link coming soon)*. To build it yourself, read on.
 
 ## Build it yourself
 
