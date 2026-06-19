@@ -1,7 +1,7 @@
 # Pixel Sort TOP — real-time GPU pixel sorting for TouchDesigner (CUDA)
 
-A pixel sorting TOP that reorders the pixels along each scanline — row or column — by a per-pixel
-key, entirely on the GPU. The sort style is chosen from a drop-down menu and shaped by a single Amount slider.
+A real pixel sorting algorithm TOP that reorders the pixels along each scanline — row or column — by a per-pixel key, entirely on the GPU. 
+The sort style is chosen from a drop-down menu and shaped by a single Amount slider.
 
 ## Demo
 
