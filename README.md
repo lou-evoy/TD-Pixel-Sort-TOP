@@ -5,9 +5,9 @@ The sort style is chosen from a drop-down menu and shaped by a single Amount sli
 
 ## Demo
 
-<video src="https://github.com/lou-evoy/TD-Pixel-Sort-TOP/raw/main/media/pixel-sort-demo.mp4" controls muted loop width="100%"></video>
+[![Pixel Sort TOP demo](media/pixel-sort-demo-poster.jpg)](media/pixel-sort-demo.mp4)
 
-> If the video doesn't play inline, [watch it here](media/pixel-sort-demo.mp4).
+▶ **[Play the demo](media/pixel-sort-demo.mp4)** — opens in GitHub's built-in video player.
 
 ## Why this one
 
