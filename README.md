@@ -7,8 +7,6 @@ The sort style is chosen from a drop-down menu and shaped by a single Amount sli
 
 [![Pixel Sort TOP demo](media/pixel-sort-demo-poster.jpg)](media/pixel-sort-demo.mp4)
 
-▶ **[Play the demo](media/pixel-sort-demo.mp4)** — opens in GitHub's built-in video player.
-
 ## Why this one
 
 - **Single-pass.** The whole frame is sorted with one device-wide radix sort over a composite
