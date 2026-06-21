@@ -5,7 +5,8 @@ The sort style is chosen from a drop-down menu and shaped by a single Amount sli
 
 ## Demo
 
-[![Pixel Sort TOP demo](media/pixel-sort-demo-poster.jpg)](media/pixel-sort-demo.mp4)
+<!-- To embed an inline auto-playing player: edit this README on github.com, delete the link below, then drag media/pixel-sort-demo.mp4 into the editor. GitHub uploads it and inserts the video player automatically. -->
+[Watch the demo ▶](media/pixel-sort-demo.mp4)
 
 ## Why this one
 
