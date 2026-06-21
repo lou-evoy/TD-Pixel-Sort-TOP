@@ -5,8 +5,9 @@ The sort style is chosen from a drop-down menu and shaped by a single Amount sli
 
 ## Demo
 
-<!-- screenshots / GIFs / video go here -->
-*Coming soon.*
+<video src="https://github.com/lou-evoy/TD-Pixel-Sort-TOP/raw/main/media/pixel-sort-demo.mp4" controls muted loop width="100%"></video>
+
+> If the video doesn't play inline, [watch it here](media/pixel-sort-demo.mp4).
 
 ## Why this one
 
@@ -19,7 +20,7 @@ The sort style is chosen from a drop-down menu and shaped by a single Amount sli
 
 ## Getting the node
 
-The compiled plugin isn't distributed here — precompiled builds will be available on **Gumroad** *(link coming soon)*. To build it yourself, read on.
+The compiled plugin isn't distributed here — precompiled builds are available on **[Gumroad](https://louevoy.gumroad.com)**. To build it yourself, read on.
 
 ## Build it yourself
 
